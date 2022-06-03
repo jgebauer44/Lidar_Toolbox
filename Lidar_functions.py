@@ -214,7 +214,6 @@ def Calc_DBS(radial_vel,ranges,el,fifth_beam = False,time=None,missing=None):
 
     '''
     if (time is None) & (len(radial_vel.shape) == 2):
-    if (time is None) & (len(radial_vel.shape) == 2):
         times = 1
         time = [0]
         vr = np.array([radial_vel])
@@ -259,7 +258,6 @@ def Calc_DBS(radial_vel,ranges,el,fifth_beam = False,time=None,missing=None):
             temp_w[i] = np.nan
             continue
         
-        if 
         temp_u = vr[j,1,i] - vr[j,3,i]/(2*np.sin(np.deg2rad(90-el)))
         temp_v = vr[j,0,i] - vr[j,2,i]/(2*np.sin(np.deg2rad(90-el)))
         if fifth_beam:
@@ -298,7 +296,7 @@ def plot_VAD(vad,dname,plot_time_index = None, title=None):
         Title to put on the plot. The default is None.
 
     '''
-    if plot_time is None:
+    if plot_time_index is None:
         plot_time = len(vad.time) - 1
         start = 0
     else:
@@ -336,11 +334,11 @@ def plot_VAD(vad,dname,plot_time_index = None, title=None):
     
         plt.tight_layout()
         
-        if os.path.isdir(filename):
-            plt.savefig(filename + '/VAD_' + str(vad.time[i]))
+        if os.path.isdir(dname):
+            plt.savefig(dname + '/VAD_' + str(vad.time[i]))
         else:
-            os.mkdir(filename)
-            plt.savefig(filename + '/VAD_' + str(vad.time[i]))
+            os.mkdir(dname)
+            plt.savefig(dname + '/VAD_' + str(vad.time[i]))
         
         plt.close()
         
@@ -913,22 +911,46 @@ def xcorr(y1,y2):
     
     return corr,lags
 
-##############################################################################
-# This function will work with LidarSim data
-##############################################################################
 
 def process_LidarSim_scan(scan,scantype,elevation,azimuth,ranges,time):
+    '''
+    A quick function to process data from LidarSim
+
+    Parameters
+    ----------
+    scan : 3d array
+        Radial velocity data from a LidarSim scan
+    scantype : str
+        Type of scan to process: "VAD", "DBS", or "DBS5"
+    elevation : 1d array
+        Elevation array for LidarSim scan
+    azimuth : 1d array
+        Azimuth array for LidarSim scan
+    ranges : 1d array
+        Range array for LidarSim scan
+    time : 1d array
+        Time array for LidarSim scan
+
+    Returns
+    -------
+    VAD or DBS class
+        Returns the appropriate class depending on scantype
+    '''
     
-    if scantype == 'vad':
+    if scantype == 'VAD':
         el = np.nanmean(elevation)
         vad = ARM_VAD(scan,ranges,el,azimuth,time)
         
         return vad
     
-    if scantype = 'DBS':
-        
+    elif scantype == 'DBS':
         el = np.nanmean(elevation)
-        dbs = DBS()
+        dbs = Calc_DBS(scan,ranges,el,time=time)
+        return dbs
+    elif scantype == 'DBS5':
+        el = np.nanmean(elevation)
+        dbs = Calc_DBS(scan,ranges,el,fifth_beam=True,time=time)
+        return dbs
     else:
         print('Not a valid scan type')
         return np.nan
