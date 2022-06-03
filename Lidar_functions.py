@@ -141,7 +141,7 @@ def ARM_VAD(radial_vel,ranges,el,az,time=None,missing=None):
             foo = np.where(~np.isnan(vr[j,:,i]))[0]
 
             # Need at a least rays to do a VAD
-            if len(foo) == 3:
+            if len(foo) < 3:
                 temp_u[i] = np.nan
                 temp_v[i] = np.nan
                 temp_w[i] = np.nan
