@@ -30,6 +30,19 @@ class VAD:
        self.time = np.array(time)
 
 ##############################################################################
+# This is a class created for DBS data
+##############################################################################
+class DBS:
+    def __init__(self,u,v,w,speed,wdir,du,dv,dw,z,residual,time):
+       self.u = np.array(u)
+       self.v = np.array(v)
+       self.w = np.array(w)
+       self.speed = np.array(speed)
+       self.wdir = np.array(wdir)
+       self.z = z
+       self.time = np.array(time)
+       
+##############################################################################
 # This is a class created for gridded RHI data
 ##############################################################################
 
@@ -64,14 +77,34 @@ class vertical_vr:
         self.azimuth = az
         self.elevation = np.array(z_el)
         self.range = np.array(z_range)
- 
-##############################################################################
-# This function calculates VAD wind profiles using the technique shown in
-# Newsom et al. (2019). This function can calculate one VAD profile or a series
-# of VAD profiles depending on the radial velocity input
-##############################################################################
 
 def ARM_VAD(radial_vel,ranges,el,az,time=None,missing=None):
+    '''
+    Calculates VAD wind profiles using technique shown in Newsom et al. (2019)
+
+    Parameters
+    ----------
+    radial_vel : 1 or 2D array
+        Radial velocity data in array formatted either as (ray,range) or
+        (scan,ray,range)
+    ranges : 1D array
+        Array that contains the range of the lidar gates
+    el : float
+        Elevation of the the VAD
+    az : 1D Array
+        Array that contains the azimuths the rays
+    time : array, optional
+        An array that contains the time of each scan. If None, this 
+        becomes scan number.The default is None.
+    missing : int or float, optional
+        The value that represents missing data in the VAD. The default is None.
+
+    Returns
+    -------
+    VAD class
+        A VAD class that contains all information needed from VAD.
+
+    '''
     
     if (time is None) & (len(radial_vel.shape) == 2):
         times = 1
@@ -107,7 +140,8 @@ def ARM_VAD(radial_vel,ranges,el,az,time=None,missing=None):
         for i in range(len(ranges)):
             foo = np.where(~np.isnan(vr[j,:,i]))[0]
 
-            if len(foo) == 0:
+            # Need at a least rays to do a VAD
+            if len(foo) == 3:
                 temp_u[i] = np.nan
                 temp_v[i] = np.nan
                 temp_w[i] = np.nan
@@ -152,14 +186,118 @@ def ARM_VAD(radial_vel,ranges,el,az,time=None,missing=None):
         wdir.append(temp_wdir)
 
     return VAD(u,v,w,speed,wdir,du,dv,dw,z,residual,time)
-            
-    
-##############################################################################
-# This function will plot wind profiles from VAD objects
-##############################################################################
 
-def plot_VAD(vad,filename,plot_time = None, title=None):
+def Calc_DBS(radial_vel,ranges,el,fifth_beam = False,time=None,missing=None):
+    '''
+
+    Parameters
+    ----------
+    radial_vel : 1 or 2D array
+        Radial velocity data in array formatted either as (ray,range) or
+        (scan,ray,range). Rays azimuth must be ordered (0,90,180,270,vertical).
+    ranges : 1D array
+        Array that contains the range of the lidar gates
+    el : float
+        Elevation of the the VAD
+    fifth_beam : Boolean, optional
+        If true the DBS uses the vertical beam for w. The default is False.
+    time : array, optional
+        An array that contains the time of each scan. If None, this 
+        becomes scan number.The default is None.
+    missing : int or float, optional
+        The value that represents missing data in the VAD. The default is None.
+
+    Returns
+    -------
+    DBS class
+        A DBS class that contains all information needed from DBS.
+
+    '''
+    if (time is None) & (len(radial_vel.shape) == 2):
+    if (time is None) & (len(radial_vel.shape) == 2):
+        times = 1
+        time = [0]
+        vr = np.array([radial_vel])
+        
+        if fifth_beam:
+            if vr.shape[0] < 5:
+                raise IOError('Must have 5 rays when fifth beam is true')
+        
+    elif (time is None) & (len(radial_vel.shape) == 3):
+        time = np.arange(radial_vel.shape[0])
+        vr = np.copy(radial_vel)
+        times = len(time)
+        if fifth_beam:
+            if vr.shape[1] < 5:
+                raise IOError('Must have 5 rays when fifth beam is true')
+    else:
+        times = len(time)
+        vr = np.copy(radial_vel)
+        
+    if missing is not None:
+        vr[vr==missing] = np.nan
     
+    z = ranges*np.sin(np.radians(el))
+    
+    u = []
+    v = []
+    w = []
+    speed = []
+    wdir = []
+    
+    for j in range(times):
+        temp_u = np.ones(len(ranges))*np.nan
+        temp_v = np.ones(len(ranges))*np.nan
+        temp_w = np.ones(len(ranges))*np.nan
+        
+        for i in range(len(ranges)):
+            foo = np.where(np.isnan(vr[j,:,i]))[0]
+        
+        if len(foo) > 0:
+            temp_u[i] = np.nan
+            temp_v[i] = np.nan
+            temp_w[i] = np.nan
+            continue
+        
+        if 
+        temp_u = vr[j,1,i] - vr[j,3,i]/(2*np.sin(np.deg2rad(90-el)))
+        temp_v = vr[j,0,i] - vr[j,2,i]/(2*np.sin(np.deg2rad(90-el)))
+        if fifth_beam:
+            temp_w = vr[j,4,i]
+        else:
+            temp_w = (vr[j,0,i]+vr[j,1,i]+vr[j,2,i]+vr[j,3,i])/4*np.cos(np.deg2rad(90-el))
+        
+        u.append(np.copy(temp_u))
+        v.append(np.copy(temp_v))
+        w.append(np.copy(temp_w))
+        
+        speed.append(np.sqrt(temp_u**2 + temp_v**2))
+        temp_wdir = 270 - np.rad2deg(np.arctan2(temp_v,temp_u))
+
+        foo = np.where(temp_wdir >= 360)[0]
+        temp_wdir[foo] -= 360
+        
+        wdir.append(temp_wdir)
+        
+    return DBS(u,v,w,speed,wdir,z,time)
+        
+def plot_VAD(vad,dname,plot_time_index = None, title=None):
+    '''
+    This function will plot profiles from VAD class
+
+    Parameters
+    ----------
+    vad : VAD
+        VAD class
+    dname : str
+        Directory to save plots in
+    plot_time_index : int, optional
+        Index to specific time from VAD class to plot.
+        If None, all times will be plotted. The default is None.
+    title : str, optional
+        Title to put on the plot. The default is None.
+
+    '''
     if plot_time is None:
         plot_time = len(vad.time) - 1
         start = 0
@@ -198,25 +336,51 @@ def plot_VAD(vad,filename,plot_time = None, title=None):
     
         plt.tight_layout()
         
-        if ((start == 0) & (len(vad.time) > 1)):
-            if os.path.isdir(filename):
-                plt.savefig(filename + str(vad.time[i]))
-            else:
-                os.mkdir(filename)
-                plt.savefig(filename + str(vad.time[i]))
+        if os.path.isdir(filename):
+            plt.savefig(filename + '/VAD_' + str(vad.time[i]))
         else:
-            plt.savefig(filename)
+            os.mkdir(filename)
+            plt.savefig(filename + '/VAD_' + str(vad.time[i]))
         
         plt.close()
+        
+    return
 
-##############################################################################
-# This function will take RHI scans and will put them onto a 2-D cartesian grid
-# using linear interpolation
-##############################################################################
 
-def grid_rhi(field,elevation,ranges,dims,dx,offset=None,
+def grid_rhi(field,elevation,ranges,azimuth,dims,dx,offset=None,
              time=None,missing=None):
-    
+    '''
+    Puts data from lidar RHIs into 2D cartesian grid using linear interpolation
+
+    Parameters
+    ----------
+    field : 1 or 2D array
+        Data in array formatted either as (ray,range) or (scan,ray,range)
+    elevation : 1D array
+        Elevation angle of each ray in the scan
+    ranges : 1D array
+        Range of the lidar range gates
+    azimuth : float
+        The azimuth angle at which the RHI is done
+    dims : tuple like ((xmin,xmax),(zmin,zmax))
+        The dimensions in meters of the 2D grid.
+    dx : int or float
+        Grid spacing in meters of the 2D grid.
+    offset : tuple like (x_offset, z_offset), optional
+        Distance lidar is from grid origin. If none the lidar is 
+        assumed to be at the grid origin. The default is None.
+    time : array, optional
+        An array that contains the time of each scan. If None, this 
+        becomes scan number.The default is None.
+    missing : int or float, optional
+        The value that represents missing data in the VAD. The default is None.
+
+    Returns
+    -------
+    gridded_RHI class
+        A class that contains the all relevant data for the gridded RHI
+
+    '''
     if len(dims) != 2:
         raise IOError('Dims must be a 2 length tuple')
     
@@ -266,6 +430,30 @@ def grid_rhi(field,elevation,ranges,dims,dx,offset=None,
 ##############################################################################
 
 def coplanar_analysis(vr1,vr2,el1,el2,az):
+    '''
+    Calculates a coplaner wind field from two RHIs that share the same grid
+
+    Parameters
+    ----------
+    vr1 : 2-D array
+        Gridded radial velocity field from first lidar.
+    vr2 : 2-D array
+        Gridded radial velocity field from second radar.
+    el1 : 2-D array
+        Gridded elevation angles from first lidar.
+    el2 : 2-D array
+        Gridded elevation angles from second lidar.
+    az : float
+        Azimuth of the RHIs (same for both lidars)
+
+    Returns
+    -------
+    u : 2D array
+        Horizontal velocity field
+    w : 2D array
+       Vertical velocity field
+
+    '''
     
     u = np.ones(vr1.shape)*np.nan
     w = np.ones(vr1.shape)*np.nan
@@ -283,11 +471,31 @@ def coplanar_analysis(vr1,vr2,el1,el2,az):
     
     return u, w
 
-##############################################################################
-# The function calculates the vr-variance from a timeseries of scans
-##############################################################################
 
 def vr_variance(field,time,t_avg,axis=0):
+    '''
+    Calculates Vr-variance from a timeseries of scans
+
+    Parameters
+    ----------
+    field : 3d array
+        Radial velocity data from scans
+    time : 1D array
+        Time of each scan in seconds
+    t_avg : float
+        Window of variance calculation
+    axis : TYPE, optional
+        DESCRIPTION. The default is 0.
+
+    Returns
+    -------
+    var : 2d array
+        Vr-variance from scans
+    
+    time_avg : 1d array
+        Time in the middle of the window for variance calculations
+
+    '''
     
     t_avg = t_avg*60
     start = 0
@@ -311,6 +519,40 @@ def vr_variance(field,time,t_avg,axis=0):
 
 def rhi_vertical_profile(field,elevation,azimuth,ranges,heights,dz,loc,offset=None,
                          time=None,missing=None):
+    '''
+    Generates gridded vertical profiles from RHI
+
+    Parameters
+    ----------
+    field : 2 or 3d array
+        Data in array formatted either as (ray,range) or (scan,ray,range)
+    elevation : 1d array
+        Elevation angle for each ray
+    azimuth : float
+        Azimuth of the RHI
+    ranges : 1d array
+        Range of the lidar range gates
+    heights : tuple like (zmin, zmax)
+        The range of heights for the extracted profile
+    dz : float
+        Vertical grid spacing of the profile
+    loc : tuple like (x,y)
+        Location of the extracted profile 
+    offset : tuple like (x_offset,y_offset,z_offset), optional
+        Distance lidar is offset from grid origin used to define loc.
+        If None it is assumed the lidar is grid origin. The default is None.
+    time : array, optional
+        An array that contains the time of each scan. If None, this 
+        becomes scan number.The default is None.
+    missing : int or float, optional
+        The value that represents missing data in the VAD. The default is None.
+
+    Returns
+    -------
+    vertical_vr class
+        A class that contains all relevant data for the extracted profile
+
+    '''
     
     if len(loc) != 2:
         raise IOError('Dims must be a 2 length tuple')
@@ -363,6 +605,32 @@ def rhi_vertical_profile(field,elevation,azimuth,ranges,heights,dz,loc,offset=No
 ##############################################################################
 
 def virtual_tower(vr,elevation,azimuth,height,uncertainty = 0.45):
+    '''
+    Calculates virtual towers from vertical profiles of radial velocity
+
+    Parameters
+    ----------
+    vr : tuple like (vr1(z), vr2(z)) or (vr1(z), vr2(z), vr3(z))
+        Radial velocities from the 2 or 3 lidars for virtual towers
+    elevation : tuple like (el1(z), el2(z)) or (el1(z), el2(z), el3(z))
+        Elevation angles for the extracted profiles from 2 or 3 lidars.
+    azimuth : tuple like (az1,az2) or (az1,az2,az3)
+        Azimuth of the extracted profile from lidar
+    height : 1d array
+        Heights for the virtual tower
+    uncertainty : float, optional
+        The assumed uncertainty of the radial velocities. The default is 0.45.
+
+    Returns
+    -------
+    wind - 2 or 3d array
+        Array that contains the wind components for the virtual tower as [u,v]
+        or [u,v,w].
+    
+    uncertainty - 2 or 3d array
+        Array that contains the uncertainties for each wind component in same
+        array style as the winds
+    '''
     
     if len(vr) == 2:
         u = []
@@ -453,17 +721,35 @@ def virtual_tower(vr,elevation,azimuth,height,uncertainty = 0.45):
         print('Input needs to be a length 2 or 3 tuple')
         return np.nan
 
-##############################################################################
-# This function performs a Lenshow correction to lidar data and calculates
-# vertical velocity variance. This function was originally written by Tyler
-# Bell at CIMMS in Norman, OK.
-##############################################################################
 
 def lenshow(x, freq=1, tau_min=3, tau_max=12, plot=False):
-    """
-    Reads in a timeseries. Freq is in Hz. Default taus are from avg values from Bonin Dissertation (2015)
-    Returns avg w'**2 and avg error'**2
-    """
+    '''
+    Lenshow correction to calculate vertical velocity variance
+
+    Parameters
+    ----------
+    x : 1d array
+        Timeseries of radial velocity data
+    freq : float, optional
+        Frequency of the data in Hz. The default is 1.
+    tau_min : int, optional
+        Sets the minimum lag to use for interpolation of the
+        autocorrelation function. The default is 3.
+    tau_max : int, optional
+        Sets the maximum lag to use for interpolation of the
+        autocorrelation function. The default is 12.
+    plot : boolean, optional
+        If True will plot the autocorrelation and fit. The default is False.
+
+    Returns
+    -------
+    vvar : float
+        Vertical velocity variance
+    dif : float
+        Difference from fit autocorrelation function at lag 0 from actual
+        autocovariance at lag 0   
+    '''
+    
     # Find the perturbation of x
     mean = np.mean(x)
     prime = x - mean
@@ -491,13 +777,38 @@ def lenshow(x, freq=1, tau_min=3, tau_max=12, plot=False):
         plt.ylabel("$M_{11} [m^2s^{-2}$]")
     return p1[0], acov[0] - p1[0]
 
-##############################################################################
-# This is a modified version of the Lenshow correction that adaptively selects
-# taus based on the data. This function was originally written by Tyler Bell at
-# CIMMS in Norman, OK.
-###############################################################################
     
 def lenshow_bonin(x, tau_min=1, tint_first_guess=3, freq=1, max_iter=100, plot=False):
+    '''
+    Modified Lenshow correction that adaptively selects taus.
+
+    Parameters
+    ----------
+    x : 1d array
+        Timeseries of radial velocity data
+    tau_min : int, optional
+        Sets the minimum lag to use for interpolation of the
+        autocorrelation function. The default is 1.
+    tint_first_guess : int, optional
+        First guess for adaptively selecting tau. The default is 3.
+    freq : float, optional
+        Frequency of the data in Hz. The default is 1.
+    max_iter : int, optional
+       Maximum iterations for calculating best taus. The default is 100.
+    plot : boolean, optional
+        If True will plot the autocorrelation and fit. The default is False.
+
+    Returns
+    -------
+    vvar : float
+        Vertical velocity variance
+    dif : float
+        Difference from fit autocorrelation function at lag 0 from actual
+        autocovariance at lag 0 
+    tau_max : int
+        The tau_max that was adaptively selected
+    '''
+    
     # Find the perturbation of x
     mean = np.mean(x)
     prime = x - mean
@@ -547,20 +858,49 @@ def lenshow_bonin(x, tau_min=1, tint_first_guess=3, freq=1, max_iter=100, plot=F
         plt.ylabel("$M_{11} [m^2s^{-2}$]")
     return p1[0], np.abs(acov[0] - p1[0]), tau_max
 
-##############################################################################
-# This function is used in the lenshow_bonin fuction
-##############################################################################
 
-def calc_tint(var, freq, acov, lags):
+def calc_tint(var, freq, acov):
+    '''
+    Function that used by lenshow_bonin to calculate tau_max
+    
+    Parameters
+    ----------
+    var : float
+        Variance
+    freq : int
+        Frequency of the data tha calculated the variance
+    acov : 1d array
+        Autocorrelation function
+
+    Returns
+    -------
+    tau_int : int
+        The next tau_max estimate
+    '''
+    
     ind = np.min(np.where(acov < 0))
     return freq**-1. + 1./var * sum(acov[1:ind] / freq)
 
-##############################################################################
-# This function calculates the lag correlation of a time series.
-##############################################################################
 
 def xcorr(y1,y2):
-    
+    '''
+    Function that calculates the lag correlation of a time series
+
+    Parameters
+    ----------
+    y1 : 1d array
+        First timeseries
+    y2 : 1d array
+        Second timeseries
+
+    Returns
+    -------
+    corr : 1d array
+        Lag correlations
+    lags : int
+       Number of lags correlations in corr array
+
+    '''
     if len(y1) != len(y2):
         raise ValueError('The lenghts of the inputs should be the same')
     
