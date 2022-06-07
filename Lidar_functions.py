@@ -33,13 +33,14 @@ class VAD:
 # This is a class created for DBS data
 ##############################################################################
 class DBS:
-    def __init__(self,u,v,w,speed,wdir,du,dv,dw,z,residual,time):
+    def __init__(self,u,v,w,speed,wdir,z,z_w,time):
        self.u = np.array(u)
        self.v = np.array(v)
        self.w = np.array(w)
        self.speed = np.array(speed)
        self.wdir = np.array(wdir)
        self.z = z
+       self.z_w = np.array(z_w)
        self.time = np.array(time)
        
 ##############################################################################
@@ -237,7 +238,7 @@ def Calc_DBS(radial_vel,ranges,el,fifth_beam = False,time=None,missing=None):
         vr[vr==missing] = np.nan
     
     z = ranges*np.sin(np.radians(el))
-    
+
     u = []
     v = []
     w = []
@@ -252,18 +253,18 @@ def Calc_DBS(radial_vel,ranges,el,fifth_beam = False,time=None,missing=None):
         for i in range(len(ranges)):
             foo = np.where(np.isnan(vr[j,:,i]))[0]
         
-        if len(foo) > 0:
-            temp_u[i] = np.nan
-            temp_v[i] = np.nan
-            temp_w[i] = np.nan
-            continue
+            if len(foo) > 0:
+                temp_u[i] = np.nan
+                temp_v[i] = np.nan
+                temp_w[i] = np.nan
+                continue
         
-        temp_u = vr[j,1,i] - vr[j,3,i]/(2*np.sin(np.deg2rad(90-el)))
-        temp_v = vr[j,0,i] - vr[j,2,i]/(2*np.sin(np.deg2rad(90-el)))
-        if fifth_beam:
-            temp_w = vr[j,4,i]
-        else:
-            temp_w = (vr[j,0,i]+vr[j,1,i]+vr[j,2,i]+vr[j,3,i])/4*np.cos(np.deg2rad(90-el))
+            temp_u[i] = vr[j,1,i] - vr[j,3,i]/(2*np.sin(np.deg2rad(90-el)))
+            temp_v[i] = vr[j,0,i] - vr[j,2,i]/(2*np.sin(np.deg2rad(90-el)))
+            if fifth_beam:
+                temp_w[i] = vr[j,4,i]
+            else:
+                temp_w[i] = (vr[j,0,i]+vr[j,1,i]+vr[j,2,i]+vr[j,3,i])/4*np.cos(np.deg2rad(90-el))
         
         u.append(np.copy(temp_u))
         v.append(np.copy(temp_v))
@@ -276,8 +277,11 @@ def Calc_DBS(radial_vel,ranges,el,fifth_beam = False,time=None,missing=None):
         temp_wdir[foo] -= 360
         
         wdir.append(temp_wdir)
-        
-    return DBS(u,v,w,speed,wdir,z,time)
+    
+    if fifth_beam:    
+        return DBS(u,v,w,speed,wdir,z,ranges,time)
+    else:
+        return DBS(u,v,w,speed,wdir,z,z,time)
         
 def plot_VAD(vad,dname,plot_time_index = None, title=None):
     '''
