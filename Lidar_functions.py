@@ -16,18 +16,21 @@ from scipy.optimize import leastsq
 # This is a class created for VAD data
 ##############################################################################
 class VAD:
-    def __init__(self,u,v,w,speed,wdir,du,dv,dw,z,residual,time):
+    def __init__(self,u,v,w,speed,wdir,du,dv,dw,z,residual,correlation,time,el,nbeams):
        self.u = np.array(u)
        self.v = np.array(v)
        self.w = np.array(w)
        self.speed = np.array(speed)
        self.wdir = np.array(wdir)
-       self.du = du
-       self.dv = dv
-       self.dw = dw
+       self.du = np.array(du)
+       self.dv = np.array(dv)
+       self.dw = np.array(dw)
        self.z = z
        self.residual = np.array(residual)
+       self.correlation = np.array(correlation)
        self.time = np.array(time)
+       self.el = el
+       self.nbeams = nbeams
 
 ##############################################################################
 # This is a class created for DBS data
@@ -129,23 +132,33 @@ def ARM_VAD(radial_vel,ranges,el,az,time=None,missing=None):
     u = []
     v = []
     w = []
+    du = []
+    dv = []
+    dw = []
     residual = []
     speed = []
     wdir = []
+    correlation = []
     
     for j in range(times):
         temp_u = np.ones(len(ranges))*np.nan
         temp_v = np.ones(len(ranges))*np.nan
         temp_w = np.ones(len(ranges))*np.nan
+        temp_du = np.ones(len(ranges))*np.nan
+        temp_dv = np.ones(len(ranges))*np.nan
+        temp_dw = np.ones(len(ranges))*np.nan
         
         for i in range(len(ranges)):
             foo = np.where(~np.isnan(vr[j,:,i]))[0]
 
             # Need at a least rays to do a VAD
-            if len(foo) < 3:
+            if len(foo) <= 3:
                 temp_u[i] = np.nan
                 temp_v[i] = np.nan
                 temp_w[i] = np.nan
+                temp_du[i] = np.nan
+                temp_dv[i] = np.nan
+                temp_dw[i] = np.nan
                 continue
 
             A11 = (np.cos(np.deg2rad(el))**2) * np.sum(np.sin(np.deg2rad(az[foo]))**2)
@@ -158,9 +171,9 @@ def ARM_VAD(radial_vel,ranges,el,az,time=None,missing=None):
             A = np.array([[A11,A12,A13],[A12,A22,A23],[A13,A23,A33]])
             invA = np.linalg.inv(A)
     
-            du = invA[0,0]
-            dv = invA[1,1]
-            dw = invA[2,2]
+            temp_du[i] = invA[0,0]
+            temp_dv[i] = invA[1,1]
+            temp_dw[i] = invA[2,2]
     
             b1 = np.cos(np.deg2rad(el)) * np.sum(vr[j,foo,i] * np.sin(np.deg2rad(az[foo])))
             b2 = np.cos(np.deg2rad(el)) * np.sum(vr[j,foo,i] * np.cos(np.deg2rad(az[foo])))
@@ -172,21 +185,39 @@ def ARM_VAD(radial_vel,ranges,el,az,time=None,missing=None):
             temp_u[i] = temp[0]
             temp_v[i] = temp[1]
             temp_w[i] = temp[2]
-    
+        
+            summ = np.sqrt(np.nansum(((((temp_u[i]*x[:,i])+(temp_v[i]*y)[:,i]+(temp_w[i]*z[None,i]))/np.sqrt(x[:,i]**2+y[:,i]**2+z[None,i]**2))-vr[j,:,i])**2,axis = 0))
+            temp_du[i] = summ*np.sqrt(temp_du[i]/(len(foo)-3))
+            temp_dv[i] = summ*np.sqrt(temp_dv[i]/(len(foo)-3))
+            temp_dw[i] = summ*np.sqrt(temp_dw[i]/(len(foo)-3))
+            
         u.append(np.copy(temp_u))
         v.append(np.copy(temp_v))
         w.append(np.copy(temp_w))
+        du.append(np.copy(temp_du))
+        dv.append(np.copy(temp_dv))
+        dw.append(np.copy(temp_dw))
     
-        residual.append(np.sqrt(np.nanmean(((((temp_u*x)+(temp_v*y)+((temp_w*z)[None,:]))/np.sqrt(x**2+y**2+z**2))-vr[j])**2,axis = 0)))
+        residual.append(np.sqrt(np.nanmean(((((temp_u*x)+(temp_v*y)+((temp_w*z)[None,:]))/np.sqrt(x**2+y**2+z[None,:]**2))-vr[j])**2,axis = 0)))
         speed.append(np.sqrt(temp_u**2 + temp_v**2))
         temp_wdir = 270 - np.rad2deg(np.arctan2(temp_v,temp_u))
+        
+        
 
         foo = np.where(temp_wdir >= 360)[0]
         temp_wdir[foo] -= 360
 
         wdir.append(temp_wdir)
+        
+        u_dot_r = ((temp_u*x)+(temp_v*y)+((temp_w*z)[None,:]))/np.sqrt(x**2+y**2+z**2)
+        mean_u_dot_r = np.nanmean(((temp_u*x)+(temp_v*y)+((temp_w*z)[None,:]))/\
+                       np.sqrt(x**2+y**2+z[None,:]**2),axis=0)
+        mean_vr = np.nanmean(vr[j],axis=0)
+        correlation.append(np.nanmean((u_dot_r-mean_u_dot_r)*(vr[j]-mean_vr),axis=0)/\
+                           (np.sqrt(np.nanmean((u_dot_r-mean_u_dot_r)**2,axis=0))*\
+                            np.sqrt(np.nanmean((vr[j]-mean_vr)**2,axis=0))))
 
-    return VAD(u,v,w,speed,wdir,du,dv,dw,z,residual,time)
+    return VAD(u,v,w,speed,wdir,du,dv,dw,z,residual,correlation,time,el,len(az))
 
 def Calc_DBS(radial_vel,ranges,el,fifth_beam = False,time=None,missing=None):
     '''
@@ -339,10 +370,10 @@ def plot_VAD(vad,dname,plot_time_index = None, title=None):
         plt.tight_layout()
         
         if os.path.isdir(dname):
-            plt.savefig(dname + '/VAD_' + str(vad.time[i]))
+            plt.savefig(dname + '/VAD_' + str(vad.time[i]) + '.png')
         else:
             os.mkdir(dname)
-            plt.savefig(dname + '/VAD_' + str(vad.time[i]))
+            plt.savefig(dname + '/VAD_' + str(vad.time[i]) + '.png')
         
         plt.close()
         
